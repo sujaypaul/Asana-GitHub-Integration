@@ -1,0 +1,15 @@
+name: Asana PR Metrics
+on:
+  pull_request:
+    types: [opened, edited, labeled, unlabeled]
+jobs:
+  validate-asana-link:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: everphone-gmbh/github-asana-action@v1
+        with:
+          asana-pat: ${{ secrets.ASANA_PAT }}
+          action: assert-link
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          trigger-phrase: '**Asana Task:**'
+          link-required: ${{ !contains(github.event.pull_request.labels.*.name, 'hotfix') }}
