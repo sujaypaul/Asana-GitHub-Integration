@@ -5,6 +5,7 @@ on:
 jobs:
   validate-asana-link:
     runs-on: ubuntu-latest
+    if: "!contains(github.event.pull_request.labels.*.name, 'hotfix')"
     steps:
       - uses: everphone-gmbh/github-asana-action@v3
         with:
@@ -12,4 +13,3 @@ jobs:
           action: assert-link
           github-token: ${{ secrets.GITHUB_TOKEN }}
           trigger-phrase: '**Asana Task:**'
-          link-required: ${{ !contains(github.event.pull_request.labels.*.name, 'hotfix') }}
