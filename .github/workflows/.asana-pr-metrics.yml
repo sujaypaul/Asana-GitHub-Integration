@@ -6,7 +6,7 @@ jobs:
   validate-asana-link:
     runs-on: ubuntu-latest
     steps:
-      - uses: everphone-gmbh/github-asana-action@v1
+      - uses: everphone-gmbh/github-asana-action@v3
         with:
           asana-pat: ${{ secrets.ASANA_PAT }}
           action: assert-link
