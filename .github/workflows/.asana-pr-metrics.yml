@@ -75,13 +75,13 @@ jobs:
           echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> review_time.txt
       - name: Upload Review Time
         if: github.event.action == 'review_requested'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: review-time
           path: review_time.txt
       - name: Download Review Time
         if: github.event.action == 'closed' && github.event.pull_request.merged
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: review-time
       - name: Calculate Review-to-Merge Time
