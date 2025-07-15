@@ -1,15 +1,32 @@
 name: Asana PR Metrics
 on:
   pull_request:
-    types: [opened, edited, labeled, unlabeled]
+    types: [opened, edited, labeled, unlabeled, review_requested, closed]
+  schedule:
+    - cron: '0 0 * * 1' # Run weekly on Monday at midnight UTC
 jobs:
   validate-asana-link:
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.action != 'review_requested'
     steps:
-      - uses: everphone-gmbh/github-asana-action@v3.0.0
+      - name: Check for Asana Task URL
+        id: check-url
+        run: |
+          DESCRIPTION="${{ github.event.pull_request.body }}"
+          if [[ "$DESCRIPTION" =~ "https://app.asana.com" ]] && ! [[ "${{ github.event.pull_request.labels.*.name }}" =~ "hotfix" ]]; then
+            echo "Asana task URL found"
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "No valid Asana task URL or hotfix label detected"
+            echo "status=failure" >> $GITHUB_OUTPUT
+          fi
+      - name: Create PR Attachment on Asana Task
+        if: steps.check-url.outputs.status == 'success'
+        uses: Asana/create-app-attachment-github-action@latest
         with:
-          asana-pat: ${{ secrets.ASANA_PAT }}
-          action: assert-link
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          trigger-phrase: '**Asana Task:**'
-          link-required: ${{ !contains(github.event.pull_request.labels.*.name, 'hotfix') }}
+          asana-secret: ${{ secrets.ASANA_SECRET }}
+      - name: Fail if No Asana Task URL
+        if: steps.check-url.outputs.status == 'failure' && !contains(github.event.pull_request.labels.*.name, 'hotfix')
+        run: |
+          echo "Error: No valid Asana task URL found in PR description"
+          exit 1
