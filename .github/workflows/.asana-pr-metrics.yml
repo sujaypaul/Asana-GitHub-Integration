@@ -3,7 +3,7 @@ on:
   pull_request:
     types: [opened, edited, labeled, unlabeled, review_requested, closed]
   schedule:
-    - cron: '0 0 * * 1' # Run weekly on Monday at midnight UTC
+    - cron: '5 16 * * 2' # 0 0 * * 1
 jobs:
   validate-asana-link:
     runs-on: ubuntu-latest
@@ -30,3 +30,74 @@ jobs:
         run: |
           echo "Error: No valid Asana task URL found in PR description"
           exit 1
+
+  weekly-unlinked-pr-report:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v3
+      - name: Fetch PRs
+        run: |
+          curl -H "Authorization: Bearer ${{ github.token }}" \
+               -H "Accept: application/vnd.github.v3+json" \
+               https://api.github.com/repos/${{ github.repository }}/pulls?state=open > prs.json
+      - name: Check Unlinked PRs
+        run: |
+          UNLINKED_COUNT=0
+          UNLINKED_PRS=""
+          while IFS= read -r pr; do
+            PR_NUMBER=$(echo "$pr" | jq -r '.number')
+            DESCRIPTION=$(echo "$pr" | jq -r '.body // ""')
+            LABELS=$(echo "$pr" | jq -r '.labels[].name')
+            if ! echo "$DESCRIPTION" | grep -q "https://app.asana.com" && ! echo "$LABELS" | grep -q "hotfix"; then
+              UNLINKED_COUNT=$((UNLINKED_COUNT + 1))
+              UNLINKED_PRS="$UNLINKED_PRS\n- PR #$PR_NUMBER: $(echo "$pr" | jq -r '.title')"
+            fi
+          done < <(jq -c '.[]' prs.json)
+          echo "Unlinked PRs: $UNLINKED_COUNT" > unlinked_report.txt
+          echo -e "Unlinked PRs:\n$UNLINKED_PRS" >> unlinked_report.txt
+      - name: Create GitHub Issue
+        uses: peter-evans/create-issue-from-file@v4
+        with:
+          title: "Weekly Unlinked PR Report"
+          content-filepath: unlinked_report.txt
+          labels: report, unlinked-prs
+
+  track-review-to-merge:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && (github.event.action == 'review_requested' || github.event.action == 'closed')
+    steps:
+      - uses: actions/checkout@v3
+      - name: Record Review Requested Time
+        if: github.event.action == 'review_requested'
+        run: |
+          echo "Review requested at $(date -u +%Y-%m-%dT%H:%M:%SZ)" > review_time.txt
+          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> review_time.txt
+      - name: Upload Review Time
+        if: github.event.action == 'review_requested'
+        uses: actions/upload-artifact@v3
+        with:
+          name: review-time
+          path: review_time.txt
+      - name: Download Review Time
+        if: github.event.action == 'closed' && github.event.pull_request.merged
+        uses: actions/download-artifact@v3
+        with:
+          name: review-time
+      - name: Calculate Review-to-Merge Time
+        if: github.event.action == 'closed' && github.event.pull_request.merged
+        run: |
+          REVIEW_TIME=$(grep "Review requested at" review_time.txt | cut -d' ' -f4)
+          MERGE_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          REVIEW_EPOCH=$(date -d "$REVIEW_TIME" +%s)
+          MERGE_EPOCH=$(date -d "$MERGE_TIME" +%s)
+          TIME_DIFF=$((MERGE_EPOCH - REVIEW_EPOCH))
+          HOURS=$((TIME_DIFF / 3600))
+          MINUTES=$(( (TIME_DIFF % 3600) / 60 ))
+          echo "Review-to-merge time: ${HOURS}h ${MINUTES}m" > metrics.txt
+      - name: Comment on Asana Task
+        if: github.event.action == 'closed' && github.event.pull_request.merged
+        uses: Asana/comment-on-task-github-action@v1.2
+        with:
+          asana-pat: ${{ secrets.ASANA_PAT }} # Use PAT as fallback
+          comment-text: "PR #${{ github.event.pull_request.number }} merged. Review-to-merge time: ${HOURS}h ${MINUTES}m"
