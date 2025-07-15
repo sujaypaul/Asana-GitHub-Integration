@@ -99,5 +99,5 @@ jobs:
         if: github.event.action == 'closed' && github.event.pull_request.merged
         uses: Asana/comment-on-task-github-action@v1.2
         with:
-          asana-pat: ${{ secrets.ASANA_PAT }} # Use PAT as fallback
+          asana-pat: ${{ secrets.ASANA_SECRET }} # Use PAT as fallback
           comment-text: "PR #${{ github.event.pull_request.number }} merged. Review-to-merge time: ${HOURS}h ${MINUTES}m"
