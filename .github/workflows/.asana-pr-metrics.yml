@@ -77,13 +77,27 @@ jobs:
         if: github.event.action == 'review_requested'
         uses: actions/upload-artifact@v4
         with:
-          name: review-time
+          name: review-time-${{ github.event.pull_request.number }}
           path: review_time.txt
+          retention-days: 7
+      - name: Check for Artifact
+        if: github.event.action == 'closed' && github.event.pull_request.merged
+        run: |
+          echo "Checking for artifact for PR #${{ github.event.pull_request.number }}"
+          if curl -s -H "Authorization: Bearer ${{ github.token }}" \
+               -H "Accept: application/vnd.github.v3+json" \
+               https://api.github.com/repos/${{ github.repository }}/actions/artifacts | jq -e '.artifacts[] | select(.name == "review-time-${{ github.event.pull_request.number }}")' > /dev/null; then
+            echo "artifact_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "artifact_exists=false" >> $GITHUB_OUTPUT
+          fi
+        id: check-artifact
+        continue-on-error: true
       - name: Download Review Time
         if: github.event.action == 'closed' && github.event.pull_request.merged
         uses: actions/download-artifact@v4
         with:
-          name: review-time
+          name: review-time-${{ github.event.pull_request.number }}
       - name: Calculate Review-to-Merge Time
         if: github.event.action == 'closed' && github.event.pull_request.merged
         run: |
