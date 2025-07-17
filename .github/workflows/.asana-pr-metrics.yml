@@ -151,3 +151,40 @@ jobs:
         with:
           asana-secret: ${{ secrets.ASANA_SECRET }}
           comment-text: "${{ steps.calculate-time.outputs.comment_text }}. AI-assisted lines: ${{ steps.extract-ai-lines.outputs.ai_lines }}"
+      - name: Fetch Asana Custom Field GIDs
+        if: github.event.action == 'closed' && github.event.pull_request.merged
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.REPO_ACCESS_TOKEN }} # Placeholder, not used for Asana
+          script: |
+            const description = context.payload.pull_request.body;
+            const match = description.match(/https:\/\/app.asana.com\/0\/([0-9]+)/);
+            const taskId = match ? match[1] : null;
+            if (!taskId) {
+              core.setFailed('No valid Asana task ID found in PR description');
+              return;
+            }
+            const asana = require('asana');
+            const client = asana.Client.create().useAccessToken(process.env.ASANA_SECRET);
+            const task = await client.tasks.findById(taskId, { opt_fields: 'custom_fields.gid,custom_fields.name' });
+            const fieldMap = {};
+            for (const field of task.custom_fields) {
+              if (field.name === 'Review-to-merge time') fieldMap['review_time'] = field.gid;
+              if (field.name === 'AI-assisted lines') fieldMap['ai_lines'] = field.gid;
+            }
+            core.setOutput('review_time_gid', fieldMap['review_time'] || '');
+            core.setOutput('ai_lines_gid', fieldMap['ai_lines'] || '');
+      - name: Update Asana Custom Fields
+        if: github.event.action == 'closed' && github.event.pull_request.merged
+        uses: Asana/update-task-custom-fields-github-action@latest # Hypothetical action
+        with:
+          asana-secret: ${{ secrets.ASANA_SECRET }}
+          task-id: |
+            ${{ 
+              fromJSON('{"description": "' + github.event.pull_request.body + '"}').description =~ https://app.asana.com/0/([0-9]+)/ && format('{0}', github.event.pull_request.body =~ https://app.asana.com/0/([0-9]+)/[1]) || ''
+            }}
+          custom-fields: |
+            {
+              "${{ steps.fetch-custom-fields.outputs.review_time_gid }}": "${{ steps.calculate-time.outputs.hours }}h ${{ steps.calculate-time.outputs.minutes }}m",
+              "${{ steps.fetch-custom-fields.outputs.ai_lines_gid }}": "${{ steps.extract-ai-lines.outputs.ai_lines }}"
+            }
