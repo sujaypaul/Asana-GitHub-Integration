@@ -80,18 +80,19 @@ jobs:
       - name: Commit Review Time to Dedicated Branch
         if: github.event.action == 'review_requested'
         run: |
+          git config --unset-all credential.helper || echo "No credential helper to unset"
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
+          git config http.https://github.com/.extraheader "Authorization: basic $(echo -n x-access-token:${{ secrets.REPO_ACCESS_TOKEN }} | base64)" || echo "Failed to set Git credential header"
           git checkout -b review-times || git checkout review-times
-          mkdir -p .github/review-times
-          mv .github/review-times/review-time-${{ github.event.pull_request.number }}.txt .github/review-times/ || echo "Failed to move file"
           git add .github/review-times/review-time-${{ github.event.pull_request.number }}.txt || echo "Failed to add file"
           git commit -m "Store review time for PR #${{ github.event.pull_request.number }}" || echo "No changes to commit"
-          git push https://x-access-token:${{ secrets.REPO_ACCESS_TOKEN }}@github.com/${{ github.repository }} review-times 2>&1 | tee push_output.txt
+          git push origin review-times 2>&1 | tee push_output.txt
           echo "Push exit code: $?" >> push_output.txt
           cat push_output.txt >> debug.txt
           git status >> debug.txt
           git log -n 1 >> debug.txt
+          git config --list >> debug.txt # Debug: Show Git config
         continue-on-error: true
       - name: Checkout Review Times Branch
         if: github.event.action == 'closed' && github.event.pull_request.merged
