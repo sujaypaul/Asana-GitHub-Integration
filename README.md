@@ -21,3 +21,5 @@ check feature extract AI assisted lines - test 3
 check feature extract AI assisted lines - test 4
 
 check feature extract AI assisted lines - test 5
+
+check feature extract AI assisted lines - test 6
