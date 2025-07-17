@@ -27,3 +27,5 @@ check feature extract AI assisted lines - test 6
 check feature Review time
 
 check feature Review time - test 7
+
+check feature Review time - test 3
