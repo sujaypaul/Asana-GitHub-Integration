@@ -102,25 +102,35 @@ jobs:
               issue_number: context.issue.number
             });
             let reviewTime = null;
+            console.log('Comments:', comments.map(c => c.body)); // Debug: Log all comments
             for (const comment of comments) {
               if (comment.body.includes('Review requested at:') && comment.body.includes('[Automated by Asana PR Metrics]')) {
-                reviewTime = comment.body.match(/Review requested at: (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.*)/)[1];
-                break;
+                const match = comment.body.match(/Review requested at: (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.*Z)/);
+                if (match && match[1]) {
+                  reviewTime = match[1];
+                  break;
+                }
               }
             }
             if (!reviewTime) {
-              core.setFailed('No review requested time found in PR comments');
+              core.setFailed('No valid review requested time found in PR comments');
               return;
             }
             const mergeTime = new Date().toISOString();
-            const reviewEpoch = new Date(reviewTime).getTime() / 1000;
-            const mergeEpoch = new Date(mergeTime).getTime() / 1000;
+            const reviewDate = new Date(reviewTime);
+            const mergeDate = new Date(mergeTime);
+            if (isNaN(reviewDate.getTime()) || isNaN(mergeDate.getTime())) {
+              core.setFailed('Invalid date conversion for review or merge time');
+              return;
+            }
+            const reviewEpoch = reviewDate.getTime() / 1000;
+            const mergeEpoch = mergeDate.getTime() / 1000;
             const timeDiff = mergeEpoch - reviewEpoch;
             const hours = Math.floor(timeDiff / 3600);
             const minutes = Math.floor((timeDiff % 3600) / 60);
             core.setOutput('hours', hours);
             core.setOutput('minutes', minutes);
-            core.setOutput('comment_text', `PR #${context.issue.number} merged. Review-to-merge time: ${hours}h ${minutes}m.`);
+            core.setOutput('comment_text', `PR #${context.issue.number} merged. Review-to-merge time: ${hours}h ${minutes}m`);
       - name: Extract AI-Assisted Line Changes
         if: github.event.action == 'closed' && github.event.pull_request.merged
         run: |
@@ -140,4 +150,4 @@ jobs:
         uses: Asana/comment-on-task-github-action@v1.2
         with:
           asana-secret: ${{ secrets.ASANA_SECRET }}
-          comment-text: "PR #${{ github.event.pull_request.number }} merged. Review-to-merge time: ${{ steps.calculate-time.outputs.comment_text }}. AI-assisted lines: ${{ steps.extract-ai-lines.outputs.ai_lines }}"
+          comment-text: "${{ steps.calculate-time.outputs.comment_text }}. AI-assisted lines: ${{ steps.extract-ai-lines.outputs.ai_lines }}"
