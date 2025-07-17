@@ -174,15 +174,23 @@ jobs:
             }
             core.setOutput('review_time_gid', fieldMap['review_time'] || '');
             core.setOutput('ai_lines_gid', fieldMap['ai_lines'] || '');
+      - name: Extract Task ID
+        if: github.event.action == 'closed' && github.event.pull_request.merged
+        id: extract-task-id
+        run: |
+          DESCRIPTION="${{ github.event.pull_request.body }}"
+          if [[ "$DESCRIPTION" =~ https://app.asana.com/0/([0-9]+)/ ]]; then
+            TASK_ID="${BASH_REMATCH[1]}"
+            echo "task-id=$TASK_ID" >> $GITHUB_OUTPUT
+          else
+            echo "task-id=" >> $GITHUB_OUTPUT
+          fi
       - name: Update Asana Custom Fields
         if: github.event.action == 'closed' && github.event.pull_request.merged
         uses: Asana/update-task-custom-fields-github-action@latest # Hypothetical action
         with:
           asana-secret: ${{ secrets.ASANA_SECRET }}
-          task-id: |
-            ${{ 
-              fromJSON('{"description": "' + github.event.pull_request.body + '"}').description =~ https://app.asana.com/0/([0-9]+)/ && format('{0}', github.event.pull_request.body =~ https://app.asana.com/0/([0-9]+)/[1]) || ''
-            }}
+          task-id: ${{ steps.extract-task-id.outputs.task-id }}
           custom-fields: |
             {
               "${{ steps.fetch-custom-fields.outputs.review_time_gid }}": "${{ steps.calculate-time.outputs.hours }}h ${{ steps.calculate-time.outputs.minutes }}m",
