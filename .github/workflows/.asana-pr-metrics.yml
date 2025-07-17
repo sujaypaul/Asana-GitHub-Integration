@@ -120,16 +120,6 @@ jobs:
             echo "ai_lines=none" >> $GITHUB_OUTPUT
           fi
         id: extract-ai-lines
-      - name: Update Asana Custom Field
-        if: github.event.action == 'closed' && github.event.pull_request.merged && steps.extract-ai-lines.outputs.ai_lines != 'none'
-        run: |
-          ASANA_TASK_URL=$(echo "${{ github.event.pull_request.body }}" | grep -o 'https://app.asana.com[^ ]*')
-          TASK_ID=$(echo "$ASANA_TASK_URL" | grep -o '[0-9]\{16,\}')
-          curl -X PUT \
-            -H "Authorization: Bearer ${{ secrets.ASANA_SECRET }}" \
-            -H "Content-Type: application/json" \
-            -d "{\"data\": {\"custom_fields\": {\"<YOUR_CUSTOM_FIELD_GID>\": \"+${{ steps.extract-ai-lines.outputs.ai_lines }}\"}}}" \
-            https://app.asana.com/api/1.0/tasks/$TASK_ID
       - name: Comment on Asana Task
         if: github.event.action == 'closed' && github.event.pull_request.merged
         uses: Asana/comment-on-task-github-action@v1.2
