@@ -1,6 +1,6 @@
 # Asana-GitHub-Integration
 
-check Custom field update -test 3
+check Custom field update -test 3 edited
 
 check Custom field update -test 2
 
