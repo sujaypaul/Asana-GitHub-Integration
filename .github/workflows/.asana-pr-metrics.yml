@@ -82,9 +82,10 @@ jobs:
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add .github/review-times/review-time-${{ github.event.pull_request.number }}.txt
-          git commit -m "Store review time for PR #${{ github.event.pull_request.number }}" || echo "No changes to commit"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          git add .github/review-times/review-time-${{ github.event.pull_request.number }}.txt || echo "Failed to add file, continuing"
+          git commit -m "Store review time for PR #${{ github.event.pull_request.number }}" || echo "No changes to commit, continuing"
+          git push https://x-access-token:${{ secrets.REPO_ACCESS_TOKEN }}@github.com/${{ github.repository }} HEAD:${{ github.event.pull_request.head.ref }} || echo "Push failed, continuing"
+        continue-on-error: true # Allow workflow to continue if push fails
       - name: Calculate Review-to-Merge Time
         if: github.event.action == 'closed' && github.event.pull_request.merged
         run: |
