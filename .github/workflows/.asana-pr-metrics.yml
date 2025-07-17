@@ -124,5 +124,5 @@ jobs:
         if: github.event.action == 'closed' && github.event.pull_request.merged
         uses: Asana/comment-on-task-github-action@v1.2
         with:
-          asana-pat: ${{ secrets.ASANA_TOKEN }}
+          asana-secret: ${{ secrets.ASANA_SECRET }}
           comment-text: "PR #${{ github.event.pull_request.number }} merged. Review-to-merge time: ${HOURS}h ${MINUTES}m. AI-assisted lines: ${{ steps.extract-ai-lines.outputs.ai_lines }}"
