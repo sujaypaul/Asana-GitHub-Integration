@@ -187,12 +187,23 @@ jobs:
           fi
       - name: Update Asana Custom Fields
         if: github.event.action == 'closed' && github.event.pull_request.merged
-        uses: Asana/update-task-custom-fields-github-action@latest # Hypothetical action
+        uses: actions/github-script@v6
         with:
-          asana-secret: ${{ secrets.ASANA_SECRET }}
-          task-id: ${{ steps.extract-task-id.outputs.task-id }}
-          custom-fields: |
-            {
-              "${{ steps.fetch-custom-fields.outputs.review_time_gid }}": "${{ steps.calculate-time.outputs.hours }}h ${{ steps.calculate-time.outputs.minutes }}m",
-              "${{ steps.fetch-custom-fields.outputs.ai_lines_gid }}": "${{ steps.extract-ai-lines.outputs.ai_lines }}"
+          github-token: ${{ secrets.REPO_ACCESS_TOKEN }} # Placeholder, not used for Asana
+          script: |
+            const taskId = "${{ steps.extract-task-id.outputs.task-id }}";
+            if (!taskId) {
+              core.setFailed('No valid Asana task ID found in PR description');
+              return;
             }
+            const asana = require('asana');
+            const client = asana.Client.create().useAccessToken(process.env.ASANA_SECRET);
+            const reviewTimeGid = "${{ steps.fetch-custom-fields.outputs.review_time_gid }}";
+            const aiLinesGid = "${{ steps.fetch-custom-fields.outputs.ai_lines_gid }}";
+            const customFields = {};
+            if (reviewTimeGid) customFields[reviewTimeGid] = "${{ steps.calculate-time.outputs.hours }}h ${{ steps.calculate-time.outputs.minutes }}m";
+            if (aiLinesGid) customFields[aiLinesGid] = "${{ steps.extract-ai-lines.outputs.ai_lines }}";
+            await client.tasks.update(taskId, {
+              custom_fields: customFields
+            });
+            core.setOutput('status', 'success');
