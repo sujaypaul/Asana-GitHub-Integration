@@ -151,6 +151,13 @@ jobs:
         with:
           asana-secret: ${{ secrets.ASANA_SECRET }}
           comment-text: "${{ steps.calculate-time.outputs.comment_text }}. AI-assisted lines: ${{ steps.extract-ai-lines.outputs.ai_lines }}"
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16' # Use a version compatible with the asana package
+      
+      - name: Install Asana Client
+        run: npm install asana
       - name: Fetch Asana Custom Field GIDs
         if: github.event.action == 'closed' && github.event.pull_request.merged
         uses: actions/github-script@v6
