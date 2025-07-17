@@ -158,7 +158,7 @@ jobs:
           github-token: ${{ secrets.REPO_ACCESS_TOKEN }} # Placeholder, not used for Asana
           script: |
             const description = context.payload.pull_request.body;
-            const match = description.match(/https:\/\/app.asana.com\/[0-9]+\/[0-9]+\/task\/([0-9]+)/);
+            const match = description.match(/https:\/\/app.asana.com\/[0-9]+\/(?:[0-9]+\/)?project\/[0-9]+\/task\/([0-9]+)/);
             const taskId = match ? match[1] : null;
             if (!taskId) {
               core.setFailed('No valid Asana task ID found in PR description');
@@ -174,7 +174,7 @@ jobs:
             }
             core.setOutput('review_time_gid', fieldMap['review_time'] || '');
             core.setOutput('ai_lines_gid', fieldMap['ai_lines'] || '');
-          debug: false #for debuggin
+          debug: false
           user-agent: actions/github-script
           result-encoding: json
           retries: 0
