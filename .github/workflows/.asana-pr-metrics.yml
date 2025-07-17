@@ -68,11 +68,15 @@ jobs:
     if: github.event_name == 'pull_request' && (github.event.action == 'review_requested' || github.event.action == 'closed')
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
       - name: Record Review Requested Time
         if: github.event.action == 'review_requested'
         run: |
-          echo "Review requested at $(date -u +%Y-%m-%dT%H:%M:%SZ)" > review_time.txt
-          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> review_time.txt
+          mkdir -p .github/review-times
+          echo "Review requested at $(date -u +%Y-%m-%dT%H:%M:%SZ)" > .github/review-times/review-time-${{ github.event.pull_request.number }}.txt
+          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> .github/review-times/review-time-${{ github.event.pull_request.number }}.txt
+          ls -la .github/review-times/ >> debug.txt # Debug: Verify file creation
       - name: Commit Review Time
         if: github.event.action == 'review_requested'
         run: |
