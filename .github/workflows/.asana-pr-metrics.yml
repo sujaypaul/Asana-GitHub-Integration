@@ -77,17 +77,30 @@ jobs:
           echo "Review requested at $(date -u +%Y-%m-%dT%H:%M:%SZ)" > .github/review-times/review-time-${{ github.event.pull_request.number }}.txt
           echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> .github/review-times/review-time-${{ github.event.pull_request.number }}.txt
           ls -la .github/review-times/ >> debug.txt # Debug: Verify file creation
-      - name: Commit Review Time
+      - name: Commit Review Time to Dedicated Branch
         if: github.event.action == 'review_requested'
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add .github/review-times/review-time-${{ github.event.pull_request.number }}.txt || echo "Failed to add file, continuing"
-          git commit -m "Store review time for PR #${{ github.event.pull_request.number }}" || echo "No changes to commit, continuing"
-          git push https://x-access-token:${{ secrets.REPO_ACCESS_TOKEN }}@github.com/${{ github.repository }} HEAD:${{ github.event.pull_request.head.ref }} || echo "Push failed, continuing"
-        continue-on-error: true # Allow workflow to continue if push fails
+          git checkout -b review-times || git checkout review-times
+          mkdir -p .github/review-times
+          mv .github/review-times/review-time-${{ github.event.pull_request.number }}.txt .github/review-times/ || echo "Failed to move file"
+          git add .github/review-times/review-time-${{ github.event.pull_request.number }}.txt || echo "Failed to add file"
+          git commit -m "Store review time for PR #${{ github.event.pull_request.number }}" || echo "No changes to commit"
+          git push https://x-access-token:${{ secrets.REPO_ACCESS_TOKEN }}@github.com/${{ github.repository }} review-times 2>&1 | tee push_output.txt
+          echo "Push exit code: $?" >> push_output.txt
+          cat push_output.txt >> debug.txt
+          git status >> debug.txt
+          git log -n 1 >> debug.txt
+        continue-on-error: true
+      - name: Checkout Review Times Branch
+        if: github.event.action == 'closed' && github.event.pull_request.merged
+        uses: actions/checkout@v4
+        with:
+          ref: review-times
       - name: Calculate Review-to-Merge Time
         if: github.event.action == 'closed' && github.event.pull_request.merged
+        id: calculate-time
         run: |
           REVIEW_TIME_FILE=".github/review-times/review-time-${{ github.event.pull_request.number }}.txt"
           if [ -f "$REVIEW_TIME_FILE" ]; then
@@ -101,10 +114,12 @@ jobs:
             echo "Review-to-merge time: ${HOURS}h ${MINUTES}m" > metrics.txt
             echo "HOURS=$HOURS" >> $GITHUB_ENV
             echo "MINUTES=$MINUTES" >> $GITHUB_ENV
+            echo "comment_text=PR #${{ github.event.pull_request.number }} merged. Review-to-merge time: ${HOURS}h ${MINUTES}m." >> $GITHUB_OUTPUT
           else
             echo "Review-to-merge time: Not available (no review time file)" > metrics.txt
             echo "HOURS=0" >> $GITHUB_ENV
             echo "MINUTES=0" >> $GITHUB_ENV
+            echo "comment_text=PR #${{ github.event.pull_request.number }} merged. Review-to-merge time: Not available (no review time file)." >> $GITHUB_OUTPUT
           fi
       - name: Extract AI-Assisted Line Changes
         if: github.event.action == 'closed' && github.event.pull_request.merged
@@ -125,4 +140,4 @@ jobs:
         uses: Asana/comment-on-task-github-action@v1.2
         with:
           asana-secret: ${{ secrets.ASANA_SECRET }}
-          comment-text: "PR #${{ github.event.pull_request.number }} merged. Review-to-merge time: ${HOURS}h ${MINUTES}m. AI-assisted lines: ${{ steps.extract-ai-lines.outputs.ai_lines }}"
+          comment-text: "PR #${{ github.event.pull_request.number }} merged. Review-to-merge time: ${{ steps.calculate-time.outputs.comment_text }}. AI-assisted lines: ${{ steps.extract-ai-lines.outputs.ai_lines }}"
