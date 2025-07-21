@@ -3,7 +3,7 @@ on:
   pull_request:
     types: [opened, edited, labeled, unlabeled, review_requested, closed]
   schedule:
-    - cron: '5 16 * * 2' # 0 0 * * 1
+    - cron: '0 4 * * *' # Daily at 9:30 AM IST (4:00 AM UTC)
 jobs:
   validate-asana-link:
     runs-on: ubuntu-latest
@@ -30,38 +30,139 @@ jobs:
         run: |
           echo "Error: No valid Asana task URL found in PR description"
           exit 1
-
-  weekly-unlinked-pr-report:
+  daily-unlinked-pr-report:
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule'
     steps:
-      - uses: actions/checkout@v3
-      - name: Fetch PRs
+      - uses: actions/checkout@v4
+      
+      - name: Fetch Open PRs
+        id: fetch-prs
         run: |
           curl -H "Authorization: Bearer ${{ github.token }}" \
                -H "Accept: application/vnd.github.v3+json" \
-               https://api.github.com/repos/${{ github.repository }}/pulls?state=open > prs.json
-      - name: Check Unlinked PRs
+               "https://api.github.com/repos/${{ github.repository }}/pulls?state=open&per_page=100" > prs.json
+          
+          # Debug: Show fetched PRs count
+          PR_COUNT=$(jq length prs.json)
+          echo "Total open PRs: $PR_COUNT"
+          
+      - name: Analyze Unlinked PRs
+        id: analyze
         run: |
           UNLINKED_COUNT=0
-          UNLINKED_PRS=""
+          UNLINKED_PRS_LIST=""
+          REPORT_DATE=$(date '+%Y-%m-%d %H:%M IST')
+          
+          echo "Analyzing PRs for Asana links..."
+          
+          # Process each PR
           while IFS= read -r pr; do
-            PR_NUMBER=$(echo "$pr" | jq -r '.number')
-            DESCRIPTION=$(echo "$pr" | jq -r '.body // ""')
-            LABELS=$(echo "$pr" | jq -r '.labels[].name')
-            if ! echo "$DESCRIPTION" | grep -q "https://app.asana.com" && ! echo "$LABELS" | grep -q "hotfix"; then
-              UNLINKED_COUNT=$((UNLINKED_COUNT + 1))
-              UNLINKED_PRS="$UNLINKED_PRS\n- PR #$PR_NUMBER: $(echo "$pr" | jq -r '.title')"
+            if [ "$pr" = "null" ] || [ -z "$pr" ]; then
+              continue
             fi
-          done < <(jq -c '.[]' prs.json)
-          echo "Unlinked PRs: $UNLINKED_COUNT" > unlinked_report.txt
-          echo -e "Unlinked PRs:\n$UNLINKED_PRS" >> unlinked_report.txt
-      - name: Create GitHub Issue
+            
+            PR_NUMBER=$(echo "$pr" | jq -r '.number // "unknown"')
+            PR_TITLE=$(echo "$pr" | jq -r '.title // "No title"')
+            PR_AUTHOR=$(echo "$pr" | jq -r '.user.login // "unknown"')
+            DESCRIPTION=$(echo "$pr" | jq -r '.body // ""')
+            PR_URL=$(echo "$pr" | jq -r '.html_url // ""')
+            
+            # Extract labels
+            LABELS=$(echo "$pr" | jq -r '.labels[]?.name // empty' | tr '\n' ' ')
+            
+            # Check for Asana link and hotfix label
+            HAS_ASANA_LINK=false
+            HAS_HOTFIX_LABEL=false
+            
+            if echo "$DESCRIPTION" | grep -q "https://app.asana.com"; then
+              HAS_ASANA_LINK=true
+            fi
+            
+            if echo "$LABELS" | grep -q "hotfix"; then
+              HAS_HOTFIX_LABEL=true
+            fi
+            
+            # PR is unlinked if it has no Asana link AND no hotfix label
+            if [ "$HAS_ASANA_LINK" = false ] && [ "$HAS_HOTFIX_LABEL" = false ]; then
+              UNLINKED_COUNT=$((UNLINKED_COUNT + 1))
+              UNLINKED_PRS_LIST="$UNLINKED_PRS_LIST
+          - **PR #$PR_NUMBER**: [$PR_TITLE]($PR_URL)
+            - **Author**: @$PR_AUTHOR
+            - **Status**: Missing Asana link and not marked as hotfix"
+            fi
+            
+          done < <(jq -c '.[]?' prs.json)
+          
+          echo "unlinked_count=$UNLINKED_COUNT" >> $GITHUB_OUTPUT
+          echo "report_date=$REPORT_DATE" >> $GITHUB_OUTPUT
+          
+          # Create report content
+          if [ $UNLINKED_COUNT -eq 0 ]; then
+            REPORT_CONTENT="# 🎉 Daily Unlinked PR Report - $REPORT_DATE
+          
+          **Status**: ✅ All PRs are properly linked!
+          
+          - **Total Open PRs**: $(jq length prs.json)
+          - **Unlinked PRs**: 0
+          - **Compliance Rate**: 100%
+          
+          All open pull requests either have valid Asana task links"
+          else
+            REPORT_CONTENT="# ⚠️ Daily Unlinked PR Report - $REPORT_DATE
+          
+          **Status**: 🔴 Found $UNLINKED_COUNT unlinked PR(s)
+          
+          ## Summary
+          - **Total Open PRs**: $(jq length prs.json)
+          - **Unlinked PRs**: $UNLINKED_COUNT
+          - **Compliance Rate**: $(( ($(jq length prs.json) - UNLINKED_COUNT) * 100 / $(jq length prs.json) ))%
+          
+          ## Unlinked PRs
+          The following PRs are missing Asana task links and are not marked as hotfix:
+          $UNLINKED_PRS_LIST
+          
+          ## Action Required
+          Please ensure all PRs include:
+          1. A valid Asana task URL in the description (https://app.asana.com/...)
+          2. OR apply the \`hotfix\` label for emergency fixes
+          
+          This helps us track work progress and maintain proper project management."
+          fi
+          
+          # Save to file
+          echo "$REPORT_CONTENT" > unlinked_report.md
+          
+          # Also output for debugging
+          echo "Generated report with $UNLINKED_COUNT unlinked PRs"
+        
+      - name: Create/Update GitHub Issue
         uses: peter-evans/create-issue-from-file@v4
         with:
-          title: "Weekly Unlinked PR Report"
-          content-filepath: unlinked_report.txt
-          labels: report, unlinked-prs
+          title: "📊 Daily Unlinked PR Report - ${{ steps.analyze.outputs.report_date }}"
+          content-filepath: unlinked_report.md
+          labels: |
+            report
+            unlinked-prs
+            automated
+            ${{ steps.analyze.outputs.unlinked_count > 0 && 'needs-attention' || 'all-good' }}
+          assignees: sujaypaul-Nagarro
+        
+      - name: Post Summary to PR (if running on PR event)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const unlinkedCount = ${{ steps.analyze.outputs.unlinked_count }};
+            const emoji = unlinkedCount === 0 ? '✅' : '⚠️';
+            const status = unlinkedCount === 0 ? 'All PRs linked properly!' : `${unlinkedCount} unlinked PR(s) found`;
+            
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `${emoji} **Daily PR Link Check**: ${status}`
+            });
 
   track-review-to-merge:
     runs-on: ubuntu-latest
