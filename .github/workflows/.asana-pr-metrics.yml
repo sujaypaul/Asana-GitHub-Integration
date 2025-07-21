@@ -153,6 +153,7 @@ jobs:
             automated
             ${{ steps.analyze.outputs.unlinked_count > 0 && 'needs-attention' || 'all-good' }}
           assignees: sujaypaul-Nagarro
+          token: ${{ secrets.REPO_ACCESS_TOKEN }}
         
       - name: Post Summary to PR (if running on PR event)
         if: github.event_name == 'pull_request'
