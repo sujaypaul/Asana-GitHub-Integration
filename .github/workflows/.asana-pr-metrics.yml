@@ -4,6 +4,12 @@ on:
     types: [opened, edited, labeled, unlabeled, review_requested, closed]
   schedule:
     - cron: '0 4 * * *' # Daily at 9:30 AM IST (4:00 AM UTC)
+  workflow_dispatch: # Add this line for manual testing
+    inputs:
+      test_mode:
+        description: 'Run in test mode'
+        required: false
+        default: 'true'
 jobs:
   validate-asana-link:
     runs-on: ubuntu-latest
