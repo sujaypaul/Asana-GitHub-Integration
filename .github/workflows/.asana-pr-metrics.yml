@@ -38,7 +38,7 @@ jobs:
           exit 1
   daily-unlinked-pr-report:
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
       
