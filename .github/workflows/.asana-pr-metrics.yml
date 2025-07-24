@@ -2,8 +2,8 @@ name: Asana PR Metrics
 on:
   pull_request:
     types: [opened, edited, labeled, unlabeled, review_requested, closed]
-  schedule:
-    - cron: '0 4 * * *' # Daily at 9:30 AM IST (4:00 AM UTC)
+  # schedule:
+  #   - cron: '0 4 * * *' # Daily at 9:30 AM IST (4:00 AM UTC)
   workflow_dispatch: # Add this line for manual testing
     inputs:
       test_mode:
